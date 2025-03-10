@@ -1,125 +1,162 @@
 import os
 import requests
 import time
-import json
-import shutil
-from pathlib import Path
+import zipfile
+from datetime import datetime
 
-# Настройки
+# Данные архива
+ARCHIVE_PATH = 'archive/protected_archive.zip'
+PASSWORD = b'netology'  # Пароль в байтах
+
+# Директория распаковки
+EXTRACT_DIR = 'extracted'
+
+# Файл отчета
+REPORT_FILE = 'report.txt'
+
+# Данные API
 API_KEY = '69c6e5b0753784312c9193ac1e65a38d2cb35667d98a2cbebe671da9fb5e8004'
 HEADERS = {'x-apikey': API_KEY}
 
-INPUT_DIR = 'files_to_scan'         # Папка с файлами для проверки
-PROCESSED_DIR = 'processed_files'   # Папка для обработанных файлов
-REPORT_FILE = 'vt_analysis_report.txt'
+# Целевые антивирусы
+TARGET_AV = {'Fortinet', 'McAfee', 'Yandex', 'Sophos'}
 
-# Создаем необходимые директории
-Path(INPUT_DIR).mkdir(exist_ok=True)
-Path(PROCESSED_DIR).mkdir(exist_ok=True)
+# Параметры анализа
+MAX_ANALYSIS_TIME = 300  # Максимальное время анализа 5 минут
+CHECK_INTERVAL = 30      # Проверять каждые 30 секунд
 
-def scan_file(file_path: Path) -> dict:
-    """Загружает и анализирует файл через VirusTotal API v3"""
+def extract_archive():
+    """Распаковка архива"""
     try:
-        # 1. Загрузка файла
+        with zipfile.ZipFile(ARCHIVE_PATH) as zf:
+            zf.extractall(EXTRACT_DIR, pwd=PASSWORD)
+            print(f"[+] Архив распакован в директорию {EXTRACT_DIR}")
+            return True
+    except Exception as e:
+        print(f"[-] Ошибка распаковки архива: {e}")
+        return False
+
+def upload_file(file_path):
+    """Загрузка файла на VirusTotal"""
+    if not os.path.exists(file_path):
+        return {"error": f"Файл {file_path} не найден"}
+    
+    try:
         with open(file_path, 'rb') as f:
             response = requests.post(
                 'https://www.virustotal.com/api/v3/files',
                 headers=HEADERS,
-                files={'file': (file_path.name, f)}
+                files={'file': (os.path.basename(file_path), f)}
             )
-            response.raise_for_status()
-            analysis_id = response.json()['data']['id']
-            print(f"[+] Файл {file_path.name} загружен (ID: {analysis_id})")
-        
-        # 2. Ожидание завершения анализа
-        analysis = wait_for_analysis(analysis_id)
-        if not analysis:
-            print(f"[-] Не удалось получить анализ для {file_path.name}")
-            return {}
             
-        # 3. Получение детального отчета
-        return analysis['data']['attributes']
-        
+        if response.status_code == 200:
+            return {"analysis_id": response.json()['data']['id']}
+        return {"error": f"Ошибка загрузки файла: {response.status_code}"}
     except Exception as e:
-        print(f"[-] Ошибка при анализе {file_path.name}: {str(e)}")
-        return {}
+        return {"error": f"Критическая ошибка загрузки файла: {str(e)}"}
 
-def wait_for_analysis(analysis_id: str, retries=10, delay=30) -> dict:
-    """Ожидает завершения анализа"""
-    url = f'https://www.virustotal.com/api/v3/analyses/{analysis_id}'
+def get_analysis_status(analysis_id):
+    """Проверка статуса анализа"""
+    start_time = datetime.now()
     
-    for _ in range(retries):
+    while (datetime.now() - start_time).seconds < MAX_ANALYSIS_TIME:
         try:
-            response = requests.get(url, headers=HEADERS)
-            response.raise_for_status()
-            report = response.json()
+            response = requests.get(
+                f'https://www.virustotal.com/api/v3/analyses/{analysis_id}',
+                headers=HEADERS
+            )
             
-            if report['data']['attributes']['status'] == 'completed':
-                return report
+            if response.status_code != 200:
+                return None
                 
-            print(f"[!] Анализ не завершен. Ожидание {delay} сек...")
-            time.sleep(delay)
+            report = response.json()
+            status = report.get('data', {}).get('attributes', {}).get('status')
+            
+            if status == 'completed':
+                return report
+            if status in ['queued', 'in_progress']:
+                print(f"[!] Анализ {status}, ожидание...")
+                time.sleep(CHECK_INTERVAL)
+                continue
+            return None
             
         except Exception as e:
-            print(f"[-] Ошибка проверки анализа: {str(e)}")
-            break
-            
-    print(f"[-] Таймаут ожидания анализа для ID: {analysis_id}")
-    return {}
+            print(f"[-] Ошибка проверки статуса: {e}")
+            time.sleep(CHECK_INTERVAL)
+    
+    print(f"[-] Таймаут анализа {analysis_id}")
+    return None
 
-def generate_report(attributes: dict, file_name: str):
-    """Формирует отчет по результатам анализа"""
-    if not attributes:
+def analyze_report(report):
+    """Анализ отчета VirusTotal"""
+    if not report:
+        return None
+        
+    stats = {
+        'total': 0,
+        'malicious': 0,
+        'detected_by': [],
+        'target_av': {'detected': [], 'not_detected': []}
+    }
+    
+    results = report.get('data', {}).get('attributes', {}).get('results', {})
+    for av, data in results.items():
+        stats['total'] += 1
+        if data.get('category') == 'malicious':
+            stats['malicious'] += 1
+            stats['detected_by'].append(av)
+            if av in TARGET_AV:
+                stats['target_av']['detected'].append(av)
+        elif av in TARGET_AV:
+            stats['target_av']['not_detected'].append(av)
+            
+    return stats
+
+def generate_report(stats, filename):
+    """Генерация текстового отчета"""
+    if not stats:
         return
         
-    stats = attributes['stats']
-    results = attributes['results']
-    sandbox = attributes.get('sandbox', {})
-    
-    detected_avs = [av for av, data in results.items() if data['category'] == 'malicious']
-    target_avs = ['Fortinet', 'McAfee', 'Yandex', 'Sophos']
-    
     with open(REPORT_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"\n=== Отчет для файла: {file_name} ===\n")
-        f.write(f"MD5: {attributes['md5']}\n")
-        f.write(f"SHA-256: {attributes['sha256']}\n")
-        f.write(f"Размер: {attributes['size']} байт\n")
-        f.write(f"Вредоносных вердиктов: {stats['malicious']}/{len(results)}\n")
-        
-        f.write("\n--- Обнаружившие антивирусы ---\n")
-        for av in detected_avs:
-            f.write(f"- {av}\n")
-            
-        f.write("\n--- Целевые антивирусы ---\n")
-        for av in target_avs:
-            status = "Обнаружил" if av in detected_avs else "Не обнаружил"
-            f.write(f"{av}: {status}\n")
-            
-        if sandbox:
-            f.write("\n--- Данные песочницы ---\n")
-            f.write(f"Домены: {', '.join(sandbox.get('domains', []))}\n")
-            f.write(f"IP-адреса: {', '.join(sandbox.get('ips', []))}\n")
-            f.write(f"Поведение: {sandbox.get('behavior', {}).get('description', 'Нет данных')}\n")
-
-def move_processed(file_path: Path):
-    """Перемещает обработанный файл"""
-    try:
-        shutil.move(str(file_path), os.path.join(PROCESSED_DIR, file_path.name))
-        print(f"[+] Файл {file_path.name} перемещен в {PROCESSED_DIR}")
-    except Exception as e:
-        print(f"[-] Ошибка перемещения {file_path.name}: {str(e)}")
+        f.write(f"Отчет для: {filename}\n{'='*40}\n")
+        f.write(f"Обнаружено: {stats['malicious']}/{stats['total']}\n")
+        f.write("Антивирусы:\n" + "\n".join([f"- {av}" for av in stats['detected_by']]) + "\n\n")
+        f.write("Целевые антивирусы:\n")
+        f.write(f"Обнаружили: {', '.join(stats['target_av']['detected'])}\n")
+        f.write(f"Не обнаружили: {', '.join(stats['target_av']['not_detected'])}\n")
 
 def main():
-    print("[*] Начинаем анализ файлов...")
-    
-    for file_path in Path(INPUT_DIR).iterdir():
-        if file_path.is_file():
-            print(f"\n[*] Обрабатываем файл: {file_path.name}")
-            attributes = scan_file(file_path)
-            generate_report(attributes, file_path.name)
-            move_processed(file_path)
-    
-    print(f"\n[+] Анализ завершен! Отчет сохранен в {REPORT_FILE}")
+    # Подготовка окружения
+    if os.path.exists(REPORT_FILE):
+        os.remove(REPORT_FILE)
+    if not extract_archive():
+        return
+        
+    # Обработка файлов
+    for root, _, files in os.walk(EXTRACT_DIR):
+        for file in files:
+            file_path = os.path.join(root, file)
+            print(f"[*] Обработка файла {file}")
+            
+            # Загрузка файла
+            upload_result = upload_file(file_path)
+            if 'error' in upload_result:
+                print(upload_result['error'])
+                continue
+                
+            analysis_id = upload_result['analysis_id']
+            print(f"[+] ID анализа: {analysis_id}")
+            
+            # Получение результатов
+            report = get_analysis_status(analysis_id)
+            if not report:
+                print("[-] Не удалось получить отчет")
+                continue
+                
+            # Генерация отчета
+            stats = analyze_report(report)
+            generate_report(stats, file)
+            print(f"[+] Отчет для {file} сохранен")
 
 if __name__ == "__main__":
     main()
