@@ -1,0 +1,35 @@
+Отчет для: invoice-42369643.html
+========================================
+Обнаружено: 27/76
+Антивирусы:
+- Lionic
+- MicroWorld-eScan
+- ClamAV
+- CTX
+- Sangfor
+- Symantec
+- ESET-NOD32
+- Avast
+- GData
+- Kaspersky
+- BitDefender
+- Tencent
+- Emsisoft
+- DrWeb
+- VIPRE
+- FireEye
+- Google
+- Kingsoft
+- Arcabit
+- ViRobot
+- Microsoft
+- Varist
+- ALYac
+- Ikarus
+- Fortinet
+- AVG
+- alibabacloud
+
+Целевые антивирусы:
+Обнаружили: Fortinet
+Не обнаружили: McAfee, Sophos, Yandex
