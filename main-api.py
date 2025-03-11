@@ -137,7 +137,7 @@ def analyze_behaviour_report(behaviour_data):
         
         domains = network.get('domains', [])
         ips = network.get('ips', [])
-        behavior = attributes.get('behavior', 'Описание поведения недоступно')
+        behavior = attributes.get('behavior', [])
         
         return domains, ips, behavior
     except KeyError:
@@ -166,7 +166,7 @@ def generate_report(stats, filename, domains=None, ips=None, behavior=None):
             f.write("\n\nIP-адреса для блокировки:\n")
             f.write('\n'.join([f"- {ip}" for ip in ips]) if ips else "- Нет данных")
         else:
-            f.write("Отчёт недоступен (требуется подписка)\n")
+            f.write("Отчёт недоступен\n")
 
 def main():
     # Подготовка окружения
@@ -210,23 +210,26 @@ def main():
                     item_url = report.get('data', {}).get('links', {}).get('item', '')
                     file_sha256 = item_url.split('/')[-1] if item_url else ''
 
-                # Генерация отчета антивирусов
+                # Генерация отчетов
                 if not file_sha256:
-                    print("[-] SHA256 не найден")
-                    generate_report(stats, file)  # Генерируем отчет без Sandbox
-                    continue
+                    print("[-] SHA256 не найден") 
+                    generate_report(stats, file)  # Генерация отчета антивирусов, без Sandbox, так как SHA256 отсутствует
+                    print(f"[+] Отчет для {file} сохранен в report.txt")
+                else:
+                    print("[+] SHA256 найден")
 
-                # Получение данных для отчета Sandbox
-                behaviour_data = get_behaviour_summary(file_sha256)
-                domains, ips, behavior = analyze_behaviour_report(behaviour_data)
+                    # Получение данных для отчета Sandbox
+                    behaviour_data = get_behaviour_summary(file_sha256)
+                    domains, ips, behavior = analyze_behaviour_report(behaviour_data)
 
-                # Генерация отчета Sandbox
-                generate_report(stats, file, domains, ips, behavior)
-                print(f"[+] Отчет для {file} сохранен")
+                    # Генерация отчета антивирусов и Sandbox
+                    generate_report(stats, file, domains, ips, behavior)
+                    print(f"[+] Отчет для {file} сохранен в report.txt")
+                               
 
             except Exception as e:
                 print(f"Ошибка при обработке файла {file}: {e}")
-                continue  # Пропуск текущей итерации при возникновении исключения
+                continue  # Пропуск итерации при возникновении исключения
 
 if __name__ == "__main__":
     main()
