@@ -174,32 +174,59 @@ def main():
         os.remove(REPORT_FILE)
     if not extract_archive():
         return
-        
+
     # Обработка файлов
     for root, _, files in os.walk(EXTRACT_DIR):
         for file in files:
             file_path = os.path.join(root, file)
             print(f"[*] Обработка файла {file}")
-            
-            # Загрузка файла
-            upload_result = upload_file(file_path)
-            if 'error' in upload_result:
-                print(upload_result['error'])
-                continue
-                
-            analysis_id = upload_result['analysis_id']
-            print(f"[+] ID анализа: {analysis_id}")
-            
-            # Получение результатов
-            report = get_analysis_status(analysis_id)
-            if not report:
-                print("[-] Не удалось получить отчет")
-                continue
-                
-            # Генерация отчета
-            stats = analyze_report(report)
-            generate_report(stats, file)
-            print(f"[+] Отчет для {file} сохранен")
+
+            try:
+                # Загрузка файла
+                upload_result = upload_file(file_path)
+                if 'error' in upload_result:
+                    print(upload_result['error'])
+                    continue  # Пропуск текущей итерации при ошибке загрузки
+
+                analysis_id = upload_result['analysis_id']
+                print(f"[+] ID анализа: {analysis_id}")
+
+                # Получение результатов
+                report = get_analysis_status(analysis_id)
+                if not report:
+                    print("[-] Не удалось получить отчет")
+                    continue
+
+                # Получение данных для отчета антивирусов
+                stats = analyze_report(report)
+                if not stats:
+                    print("[-] Ошибка анализа отчета")
+                    continue
+
+                # Получение SHA256 из отчета
+                file_sha256 = report.get('data', {}).get('attributes', {}).get('sha256', '')
+                if not file_sha256:
+                    # Если SHA256 нет в атрибутах, извлекается из URL
+                    item_url = report.get('data', {}).get('links', {}).get('item', '')
+                    file_sha256 = item_url.split('/')[-1] if item_url else ''
+
+                # Генерация отчета антивирусов
+                if not file_sha256:
+                    print("[-] SHA256 не найден")
+                    generate_report(stats, file)  # Генерируем отчет без Sandbox
+                    continue
+
+                # Получение данных для отчета Sandbox
+                behaviour_data = get_behaviour_summary(file_sha256)
+                domains, ips, behavior = analyze_behaviour_report(behaviour_data)
+
+                # Генерация отчета Sandbox
+                generate_report(stats, file, domains, ips, behavior)
+                print(f"[+] Отчет для {file} сохранен")
+
+            except Exception as e:
+                print(f"Ошибка при обработке файла {file}: {e}")
+                continue  # Пропуск текущей итерации при возникновении исключения
 
 if __name__ == "__main__":
     main()
