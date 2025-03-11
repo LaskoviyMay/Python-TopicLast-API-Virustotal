@@ -112,18 +112,61 @@ def analyze_report(report):
             
     return stats
 
-def generate_report(stats, filename):
-    """Генерация текстового отчета"""
+def get_behaviour_summary(file_id):
+    try:
+        response = requests.get(
+            f'https://www.virustotal.com/api/v3/files/{file_id}/behaviour_summary',
+            headers=HEADERS
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        print(f"[-] Sandbox отчёт недоступен: {response.status_code}")
+        return None
+    except Exception as e:
+        print(f"[-] Критическая ошибка получения отчета Sandbox: {e}")
+        return None
+
+def analyze_behaviour_report(behaviour_data):
+    if not behaviour_data:
+        return None, None, None
+    
+    try:
+        attributes = behaviour_data.get('data', {}).get('attributes', {})
+        network = attributes.get('network', {})
+        
+        domains = network.get('domains', [])
+        ips = network.get('ips', [])
+        behavior = attributes.get('behavior', 'Описание поведения недоступно')
+        
+        return domains, ips, behavior
+    except KeyError:
+        return [], [], 'Ошибка структуры отчёта'
+
+def generate_report(stats, filename, domains=None, ips=None, behavior=None):
     if not stats:
         return
         
     with open(REPORT_FILE, 'a', encoding='utf-8') as f:
+        # Отчет антивирусов
         f.write(f"Отчет для: {filename}\n{'='*40}\n")
+        f.write("\n=== VirusTotal Antivirus Statistics ===\n")
         f.write(f"Обнаружено: {stats['malicious']}/{stats['total']}\n")
         f.write("Антивирусы:\n" + "\n".join([f"- {av}" for av in stats['detected_by']]) + "\n\n")
         f.write("Целевые антивирусы:\n")
         f.write(f"Обнаружили: {', '.join(stats['target_av']['detected'])}\n")
         f.write(f"Не обнаружили: {', '.join(stats['target_av']['not_detected'])}\n")
+        
+        # Отчет Sandbox
+        f.write("\n=== VirusTotal Sandbox ===\n")
+        if domains is not None and ips is not None:
+            f.write(f"Поведение: {behavior if behavior else 'Нет данных'}\n")
+            f.write("\nДомены для блокировки:\n")
+            f.write('\n'.join([f"- {d}" for d in domains]) if domains else "- Нет данных")
+            f.write("\n\nIP-адреса для блокировки:\n")
+            f.write('\n'.join([f"- {ip}" for ip in ips]) if ips else "- Нет данных")
+        else:
+            f.write("Отчёт недоступен (требуется подписка)\n")
 
 def main():
     # Подготовка окружения
