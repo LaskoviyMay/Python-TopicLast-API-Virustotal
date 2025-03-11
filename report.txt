@@ -1,5 +1,7 @@
 Отчет для: invoice-42369643.html
 ========================================
+
+=== VirusTotal Antivirus Statistics ===
 Обнаружено: 27/76
 Антивирусы:
 - Lionic
@@ -7,25 +9,25 @@
 - ClamAV
 - CTX
 - Sangfor
+- Arcabit
 - Symantec
 - ESET-NOD32
 - Avast
-- GData
 - Kaspersky
 - BitDefender
 - Tencent
 - Emsisoft
 - DrWeb
 - VIPRE
+- Ikarus
 - FireEye
 - Google
 - Kingsoft
-- Arcabit
-- ViRobot
 - Microsoft
+- ViRobot
+- GData
 - Varist
 - ALYac
-- Ikarus
 - Fortinet
 - AVG
 - alibabacloud
@@ -33,3 +35,6 @@
 Целевые антивирусы:
 Обнаружили: Fortinet
 Не обнаружили: McAfee, Sophos, Yandex
+
+=== VirusTotal Sandbox ===
+Отчёт недоступен (требуется подписка)
