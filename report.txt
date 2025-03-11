@@ -9,26 +9,26 @@
 - ClamAV
 - CTX
 - Sangfor
-- Arcabit
 - Symantec
 - ESET-NOD32
 - Avast
 - Kaspersky
 - BitDefender
+- ViRobot
 - Tencent
 - Emsisoft
 - DrWeb
 - VIPRE
 - Ikarus
 - FireEye
-- Google
-- Kingsoft
-- Microsoft
-- ViRobot
-- GData
 - Varist
-- ALYac
 - Fortinet
+- Kingsoft
+- Arcabit
+- Microsoft
+- Google
+- ALYac
+- GData
 - AVG
 - alibabacloud
 
@@ -37,4 +37,10 @@
 Не обнаружили: McAfee, Sophos, Yandex
 
 === VirusTotal Sandbox ===
-Отчёт недоступен (требуется подписка)
+Поведение: Описание поведения недоступно
+
+Домены для блокировки:
+- Нет данных
+
+IP-адреса для блокировки:
+- Нет данных
